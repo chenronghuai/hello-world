@@ -7,36 +7,36 @@ from selenium.webdriver.support import expected_conditions as EC
 import unittest
 from time import sleep, strftime
 import HTMLTestRunner
-from selenium.webdriver.support.select import Select
+import readConfig
 from bbx_utils import switch_frame, getOriAdd
 
-
-flow_info: Dict[str, None] = {"order_id": '1', "driver_phone": '18030142505'}
 
 
 class TestFlow(unittest.TestCase):
 
+    order_id = 1
+    driver_id = 1
     @classmethod
     def setUpClass(cls):
         cls.driver = webdriver.Chrome()
-        cls.driver.get("http://106.15.43.157:8083/login.html")
+        url = readConfig.ReadConfig().get_http('scheme') + "://" + readConfig.ReadConfig().get_http('baseurl')
+        cls.driver.get(url)
         cls.driver.maximize_window()
-        cls.driver.find_element_by_id('username').send_keys("chenronghuai")
-        cls.driver.find_element_by_id('userpwd').send_keys("asdf_123456")
+        un = readConfig.ReadConfig().get_user('username')
+        pwd = readConfig.ReadConfig().get_user('password')
+        cls.driver.find_element_by_id('username').send_keys(un)
+        cls.driver.find_element_by_id('userpwd').send_keys(pwd)
         cls.driver.find_element_by_id('loginBtn').click()
         WebDriverWait(cls.driver, 5).until(
             EC.visibility_of_element_located((By.XPATH, '//*[@id="mCSB_1_container"]/ul/li[1]/span')))
-        WebDriverWait(cls.driver, 5).until(EC.visibility_of_element_located((By.CLASS_NAME, 'layui-layer-setwin')))\
+        WebDriverWait(cls.driver, 5).until(EC.visibility_of_element_located((By.XPATH, '//*[@id="layui-layer1"]/span[1]/a')))\
             .click()
         cls.driver.find_element_by_css_selector('img[src$="menu1.png"]').click()
 
     @classmethod
     def tearDownClass(cls):
         cls.driver.quit()
-    '''
-    def __init__(self):
-        self.flow_info = {"order_id" : None, "driver_phone" : None}
-    '''
+
     def driver_report(self, phone_number):
 
         switch_frame(self.driver, '[tit=司机报班]', '[tit=司机报班]', '[src="/driverReport.do"]')
@@ -71,7 +71,7 @@ class TestFlow(unittest.TestCase):
 
         self.driver.find_element_by_id('report').click()
         sleep(2)
-        flow_info['driver_phone'] = self.driver.find_element_by_xpath('//tbody/tr/td[4]').text
+        TestFlow.driver_id = self.driver.find_element_by_xpath('//tbody/tr').get_attribute('data-uid')
         return self.driver.find_element_by_xpath('//tbody/tr/td[10]').text
 
     def customer_call(self, c_phone):
@@ -131,7 +131,7 @@ class TestFlow(unittest.TestCase):
             '获取价格失败')
         self.driver.find_element_by_id('submitAll').click()
         sleep(3)
-        flow_info['order_id'] = self.driver.find_element_by_xpath('//*[@id="callOrderPage"]/table/tbody/tr[1]').get_attribute('order-id')
+        TestFlow.order_id = self.driver.find_element_by_xpath('//*[@id="callOrderPage"]/table/tbody/tr[1]').get_attribute('order-id')
 
 
     def order_center(self):
@@ -165,19 +165,21 @@ class TestFlow(unittest.TestCase):
         records = self.driver.find_elements_by_xpath('//*[@id="orderImmediately"]/table/tbody/tr')
         for i in range(len(records)):
 
-            if records[i].get_attribute('order-id') == flow_info['order_id']:
+            if records[i].get_attribute('order-id') == TestFlow.order_id:
                 xpath = '//*[@id="tdy_driver_queue"]/tr[%s]/td[15]/a[text()="指派"]' % (i+1)
                 self.driver.find_element_by_xpath(xpath).click()
                 WebDriverWait(self.driver, 5).until(
                     EC.frame_to_be_available_and_switch_to_it((By.CSS_SELECTOR, '[src^="/orderCtrl.do"]')))
                 WebDriverWait(self.driver, 5).until(
                     EC.visibility_of_element_located((By.XPATH, '//*[@id="intercity-lists"]/tr')))
-                drivers_phone = self.driver.find_elements_by_xpath('//*[@id="intercity-lists"]/tr/td[4]')
-                for j in range(len(drivers_phone)):
-                    if drivers_phone[j].text == flow_info['driver_phone']:
-                        if len(drivers_phone) > 1:
+                drivers = self.driver.find_elements_by_xpath('//*[@id="intercity-lists"]/tr/td[1]/input')
+
+                for j in range(len(drivers)):
+                    driver_id = drivers[j].get_attribute('driver_id')
+                    if driver_id == TestFlow.driver_id:
+                        if len(drivers) > 1:
                             focus_driver_xpath = '//*[@id="intercity-lists"]/tr[%s]/td[1]' % (j+1)
-                        elif len(drivers_phone) == 1:
+                        elif len(drivers) == 1:
                             focus_driver_xpath = '//*[@id="intercity-lists"]/tr/td[1]'
 
                         self.driver.find_element_by_xpath(focus_driver_xpath).click()
@@ -185,18 +187,16 @@ class TestFlow(unittest.TestCase):
                         self.driver.find_element_by_id('todoSaveBtn').click()
 #                         self.driver.switch_to.parent_frame()
                         break
-                    elif j == len(drivers_phone)-1:
+                    elif j == len(drivers)-1:
                         self.driver.find_element_by_class_name('todoExitBtn').click()
                 self.driver.switch_to.parent_frame()
                 break
         sleep(2)    #"已派"可见，但被遮挡
         WebDriverWait(self.driver, 5).until(EC.visibility_of_element_located((By.XPATH, '/html/body/div[2]/div[2]/div[3]/div[1]/div[2]/a[@title="已派"]'))).click()
-#        WebDriverWait(self.driver, 5).until(EC.element_to_be_clickable((By.XPATH, '/html/body/div[2]/div[2]/div[3]/div[1]/div[2]/a[@title="已派"]'))).click()
- #       WebDriverWait(self.driver, 5).until(EC.visibility_of_element_located((By.XPATH, '//*[@id="tdy_driver_queue"]/tr')))
         sleep(1)
         orders_send = self.driver.find_elements_by_xpath('//*[@id="tdy_driver_queue"]/tr')
         for i in range(len(orders_send)):
-            if orders_send[i].get_attribute('order-id') == flow_info['order_id']:
+            if orders_send[i].get_attribute('order-id') == TestFlow.order_id:
                 return True
                 break
         return False
@@ -234,7 +234,7 @@ class TestFlow(unittest.TestCase):
         records =self.driver.find_elements_by_xpath('//*[@id="data_table"]/tbody/tr')
 
         for i in range(len(records)):
-            if records[i].get_attribute('order-list-id') == flow_info['order_id']:
+            if records[i].get_attribute('order-list-id') == TestFlow.order_id:
                 if len(records) == 1:
                     xpath = '//*[@id="data_table"]/tbody/tr/td[21]/a[text()="上车"]'
                 else:
@@ -261,11 +261,12 @@ class TestFlow(unittest.TestCase):
                         (By.CSS_SELECTOR, '[src^="/orderManage.do?method=getOrderManageOffline"]')))
                 WebDriverWait(self.driver, 5).until(
                     EC.visibility_of_element_located((By.ID, 'todoSureBtn'))).click()
-                WebDriverWait(self.driver, 5).until(
-                    EC.invisibility_of_element_located((By.ID, 'todoSureBtn')))
+#                WebDriverWait(self.driver, 5).until(
+#                    EC.invisibility_of_element_located((By.ID, 'todoSureBtn')))
                 self.driver.switch_to.parent_frame()
                 xpath = '//*[@id="data_table"]/tbody/tr[%s]/td[17]' % (i + 1)
-   #             WebDriverWait(self.driver, 5).until(EC.visibility_of_element_located((By.XPATH, xpath))
+#                WebDriverWait(self.driver, 5).until(EC.visibility_of_element_located((By.XPATH, xpath)))
+                sleep(3)#暂时无法解决同步问题
                 if self.driver.find_element_by_xpath(xpath).text == '已完成':
                     return True
                 else:
@@ -274,20 +275,25 @@ class TestFlow(unittest.TestCase):
 
 #    @unittest.skip("直接跳过")
     def test_driver_report(self):
-        report_status = self.driver_report(13345678965)
+        driver_phone = readConfig.ReadConfig().get_user('driver_phone')
+        report_status = self.driver_report(driver_phone)
         self.assertEqual(report_status, '报班')
 
+#    @unittest.skip("直接跳过")
     def test_customer_call(self):
-        self.customer_call(5603293)
+        customer_phone = readConfig.ReadConfig().get_user('customer_phone')
+        self.customer_call(customer_phone)
         str_ori = self.driver.find_element_by_xpath('//*[@id="callOrderPage"]/table/tbody/tr[1]/td[5]').text
         str_des = self.driver.find_element_by_xpath('//*[@id="callOrderPage"]/table/tbody/tr[1]/td[6]').text
         self.assertEqual(getOriAdd(' ', 0, self.oriAdd), getOriAdd(' ', 1, str_ori))
         self.assertEqual(getOriAdd(' ', 0, self.desAdd), getOriAdd(' ', 1, str_des))
 
+#    @unittest.skip("直接跳过")
     def test_order_center(self):
         status = self.order_center()
         self.assertTrue(status)
 
+#    @unittest.skip("直接跳过")
     def test_order_manage(self):
         status = self.order_manage()
         self.assertTrue(status)
@@ -301,7 +307,7 @@ if __name__ == '__main__':
     suite.addTest(TestFlow('test_order_center'))
     suite.addTest(TestFlow("test_order_manage"))
     now_time = strftime("%Y-%m-%d %H-%M-%S")
-    file_path = "d:\\test_report\\" + now_time + "_result.html"
+    file_path = "e:\\test_report\\" + now_time + "_result.html"
     file_result = open(file_path, 'wb')
     runner = HTMLTestRunner.HTMLTestRunner(file_result, 2, u"业务后台测试报告", u"执行概况")
     runner.run(suite, 0, 2)
